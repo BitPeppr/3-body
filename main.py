@@ -21,6 +21,14 @@ def three_body(t, state, G, m1, m2, m3):
     a3 = G * m1 * (p1 - p3) / r13**3 + G * m2 * (p2 - p3) / r23**3
     return np.concatenate([v1, v2, v3, a1, a2, a3])
 
+# Single-step RK4 (for infinite rendering) ------------------------------------
+def rk4_step(f, t, y, h, *args):
+    k1 = f(t, y, *args)
+    k2 = f(t + h / 2, y + h * k1 / 2, *args)
+    k3 = f(t + h / 2, y + h * k2 / 2, *args)
+    k4 = f(t + h, y + h * k3, *args)
+    return y + (h / 6) * (k1 + 2*k2 + 2*k3 + k4)
+
 # -----------------------------------------------------------------------------
 
 # One-time rendering function for a given configuration, used for single mode -
@@ -55,16 +63,36 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 
 # -----------------------------------------------------------------------------
 
+# Infinite terminal rendering function ----------------------------------------
+def infinite_render(time_step, g, m1, m2, m3, initial_state):
+    state = initial_state
+    t = 0
+    steps_per_cycle = 100
+    while True:
+        for _ in range(steps_per_cycle):
+            state = rk4_step(three_body, 0, state, time_step, g, m1, m2, m3)
+            t += time_step
+        render(state[:6])
+        time.sleep(time_step)
+
+def render(positions):
+    p1 = positions[0:2]
+    p2 = positions[2:4]
+    p3 = positions[4:6]
+
+
+# -----------------------------------------------------------------------------
+
 # Infinite loop to find interesting configurations ----------------------------
-def infinite_config_finder():
+def infinite_config_finder(sim_time):
     # Make directories if they don't already exist
     os.makedirs(os.path.join(cwd, 'unsure/'), exist_ok=True)
     os.makedirs(os.path.join(cwd, 'interesting/'), exist_ok=True)
     os.makedirs(os.path.join(cwd, 'rejected/'), exist_ok=True)
 
     # Define constant parameters
-    t_span = (0, 1000)
-    t_eval = np.linspace(t_span[0], t_span[1], 2000000)
+    t_span = (0, sim_time)
+    t_eval = np.linspace(t_span[0], t_span[1], sim_time * 2000)
     G = 1.0
 
 
@@ -177,4 +205,4 @@ if __name__ == "__main__":
     if args.mode == 'infinite':
         pass
     if args.mode == 'random-search':
-        infinite_config_finder()
+        infinite_config_finder(int(args.time))
