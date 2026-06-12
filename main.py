@@ -1,7 +1,9 @@
 import argparse
 import os
 import random
+import shutil
 import time
+from collections import deque
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,6 +30,13 @@ def rk4_step(f, t, y, h, *args):
     k3 = f(t + h / 2, y + h * k2 / 2, *args)
     k4 = f(t + h, y + h * k3, *args)
     return y + (h / 6) * (k1 + 2*k2 + 2*k3 + k4)
+
+# -----------------------------------------------------------------------------
+
+# Get terminal size -----------------------------------------------------------
+def get_terminal_size():
+    size = shutil.get_terminal_size()
+    return size.columns, size.lines
 
 # -----------------------------------------------------------------------------
 
@@ -63,22 +72,82 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 
 # -----------------------------------------------------------------------------
 
-# Infinite terminal rendering function ----------------------------------------
-def infinite_render(time_step, g, m1, m2, m3, initial_state):
-    state = initial_state
-    t = 0
-    steps_per_cycle = 100
-    while True:
-        for _ in range(steps_per_cycle):
-            state = rk4_step(three_body, 0, state, time_step, g, m1, m2, m3)
-            t += time_step
-        render(state[:6])
-        time.sleep(time_step)
 
-def render(positions):
-    p1 = positions[0:2]
-    p2 = positions[2:4]
-    p3 = positions[4:6]
+# Infinite terminal rendering function ----------------------------------------
+def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
+    state = initial_state
+    steps_per_cycle = 2
+    pad = 0.5
+
+    trails = [deque(maxlen=80) for _ in range(3)]
+
+    print("\033[?25l", end="", flush=True)
+    
+    try:
+        while True:
+            for _ in range(steps_per_cycle):
+                state = rk4_step(three_body, 0, state, time_step, g, m1, m2, m3)
+            for i in range(3):
+                trails[i].append((state[i*2], state[i*2+1]))
+
+            cur_x = [trail[-1][0] for trail in trails]
+            cur_y = [trail[-1][1] for trail in trails]
+
+            x_min = min(cur_x) - pad
+            x_max = max(cur_x) + pad
+            y_min = min(cur_y) - pad
+            y_max = max(cur_y) + pad
+
+            frame = build_frame(state, trails, columns, lines, x_min, x_max, y_min, y_max)
+            print('\033[H' + frame, end='', flush=True)
+
+            time.sleep(time_step)
+    finally:
+        print("\033[?25h", end="", flush=True)
+
+# Helper functions to actually build ASCII / braille frame ---------------------
+def build_frame(state, trails, columns, rows, x_min, x_max, y_min, y_max):
+    bits = [[0] * columns for _ in range(rows)]
+    colors = [[(0, 0, 0) for _ in range(columns)] for _ in range(rows)]
+    
+    for age in range(len(trails[0])):
+        for body in range(3):
+            brightness = (age + 1) / 80
+            r_, g_, b_ = BODY_COLOURS[body]
+            colour = (int(r_ * brightness), int(g_ * brightness), int(b_ * brightness))
+
+            xx, yy = to_dot(trails[body][age][0], trails[body][age][1], x_min, y_min, x_max, y_max, columns, rows)
+
+            row, col, dotx, doty = dot_to_braille(xx, yy)
+
+            if 0 <= row < rows and 0 <= col < columns:
+                bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
+                bits[row][col] |= (1 << bit_index)
+                colors[row][col] = colour
+
+    lines_out = []
+    for row in range(rows):
+        line_parts = []
+        for col in range(columns):
+            if bits[row][col] != 0:
+                r_, g_, b_ = colors[row][col]
+                line_parts.append(f"\033[38;2;{r_};{g_};{b_}m{chr(0x2800 + bits[row][col])}\033[0m")
+            else:
+                line_parts.append(chr(0x2800))
+        lines_out.append(''.join(line_parts))
+    return '\n'.join(lines_out)
+
+def to_dot(x, y, x_min, y_min, x_max, y_max, width, height):
+    x_scaled = (x - x_min) / (x_max - x_min) * (width * 2 - 1)
+    y_scaled = (y - y_min) / (y_max - y_min) * (height * 4 - 1)
+    return x_scaled, y_scaled
+
+def dot_to_braille(x, y):
+    cellx = int(x // 2)
+    celly = int(y // 4)
+    dotx = int(x % 2)
+    doty = int(y % 4)
+    return celly, cellx, dotx, doty
 
 
 # -----------------------------------------------------------------------------
@@ -183,6 +252,9 @@ def parse():
     parser.add_argument('--m3', type=float, default=1.0, help='Mass of body 3 for single and infinite modes')
     parser.add_argument('--save', action='store_true', help='Whether to save the single_render for single mode')
     parser.add_argument('--initial-state', type=float, nargs=12, help='Initial state (positions and velocities) for single mode and infinite')
+    parser.add_argument('--red', type=int, nargs=3, help='RGB colour to use as red')
+    parser.add_argument('--blue', type=int, nargs=3, help='RGB colour to use as blue')
+    parser.add_argument('--green', type=int, nargs=3, help='RGB colour to use as green')
     parser.add_argument('--save_path', type=str, help = 'save path for single_renders')
     args = parser.parse_args()
     return args
@@ -195,14 +267,20 @@ def parse():
 # Main loop -------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse()
+    red = args.red if args.red else (255, 140, 160)
+    blue = args.blue if args.blue else (130, 175, 255)
+    green = args.green if args.green else (120, 220, 120)
+    BODY_COLOURS = [red, blue, green]
     cwd = os.path.expanduser(args.save_path) if args.save_path else os.getcwd()
     if args.mode == 'single':
-        initial_state = args.initial_state if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
+        initial_state = np.array(args.initial_state) if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
         single_render(int(args.time), args.g, args.m1, args.m2, args.m3, initial_state, args.save)
         print("Single simulation completed.")
         print(f"Parameters: Time={args.time}, G={args.g}, m1={args.m1}, m2={args.m2}, m3={args.m3}")
         print(f"Initial State: {initial_state}")
     if args.mode == 'infinite':
-        pass
+        columns, lines = get_terminal_size()
+        initial_state = np.array(args.initial_state) if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
+        infinite_render(0.01, args.g, args.m1, args.m2, args.m3, initial_state, columns, lines)
     if args.mode == 'random-search':
         infinite_config_finder(int(args.time))
