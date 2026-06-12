@@ -15,12 +15,12 @@ from scipy.integrate import solve_ivp
 def three_body(t, state, G, m1, m2, m3):
     p1, p2, p3 = state[:6].reshape(3, 2)
     v1, v2, v3 = state[6:].reshape(3, 2)
-    r12 = np.linalg.norm(p2 - p1)
-    r13 = np.linalg.norm(p3 - p1)
-    r23 = np.linalg.norm(p3 - p2)
-    a1 = G * m2 * (p2 - p1) / r12**3 + G * m3 * (p3 - p1) / r13**3
-    a2 = G * m1 * (p1 - p2) / r12**3 + G * m3 * (p3 - p2) / r23**3
-    a3 = G * m1 * (p1 - p3) / r13**3 + G * m2 * (p2 - p3) / r23**3
+    dr12 = p2 - p1; r12_sq = dr12 @ dr12 + 1e-3
+    dr13 = p3 - p1; r13_sq = dr13 @ dr13 + 1e-3
+    dr23 = p3 - p2; r23_sq = dr23 @ dr23 + 1e-3
+    a1 = G * m2 * dr12 / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr13 / (r13_sq * np.sqrt(r13_sq))
+    a2 = G * m1 * (-dr12) / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr23 / (r23_sq * np.sqrt(r23_sq))
+    a3 = G * m1 * (-dr13) / (r13_sq * np.sqrt(r13_sq)) + G * m2 * (-dr23) / (r23_sq * np.sqrt(r23_sq))
     return np.concatenate([v1, v2, v3, a1, a2, a3])
 
 # Single-step RK4 (for infinite rendering) ------------------------------------
@@ -78,6 +78,10 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
     state = initial_state
     steps_per_cycle = 2
     pad = 0.5
+    cam_cx = 0.0
+    cam_cy = 0.0
+    cam_hw = 3.0
+    min_cam_hw = 3.5
 
     trails = [deque(maxlen=80) for _ in range(3)]
 
@@ -93,10 +97,23 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
             cur_x = [trail[-1][0] for trail in trails]
             cur_y = [trail[-1][1] for trail in trails]
 
-            x_min = min(cur_x) - pad
-            x_max = max(cur_x) + pad
-            y_min = min(cur_y) - pad
-            y_max = max(cur_y) + pad
+            target_cx = (min(cur_x) + max(cur_x)) / 2
+            target_cy = (min(cur_y) + max(cur_y)) / 2
+            spread = max(max(cur_x) - min(cur_x), max(cur_y) - min(cur_y), 0.5)
+            target_hw = min(spread / 2 + pad, min_cam_hw)
+
+            x0, x1 = cam_cx - cam_hw, cam_cx + cam_hw
+            y0, y1 = cam_cy - cam_hw, cam_cy + cam_hw
+
+            inside = all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in zip(cur_x, cur_y))
+            smoothing = 1.0 if not inside else 0.1
+
+            cam_cx = cam_cx * (1 - smoothing) + target_cx * smoothing
+            cam_cy = cam_cy * (1 - smoothing) + target_cy * smoothing
+            cam_hw = cam_hw * (1 - smoothing) + target_hw * smoothing
+
+            x_min, x_max = cam_cx - cam_hw, cam_cx + cam_hw
+            y_min, y_max = cam_cy - cam_hw, cam_cy + cam_hw
 
             frame = build_frame(state, trails, columns, lines, x_min, x_max, y_min, y_max)
             print('\033[H' + frame, end='', flush=True)
