@@ -114,7 +114,7 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 # Infinite terminal rendering function ----------------------------------------
 def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length):
     state = initial_state
-    steps_per_cycle = 3
+    steps_per_cycle = 1
     pad = 0.5
     cam_cx = 0.0
     cam_cy = 0.0
