@@ -74,16 +74,16 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 
 
 # Infinite terminal rendering function ----------------------------------------
-def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
+def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length):
     state = initial_state
-    steps_per_cycle = 2
+    steps_per_cycle = 1
     pad = 0.5
     cam_cx = 0.0
     cam_cy = 0.0
     cam_hw = 3.0
     min_cam_hw = 3.5
 
-    trails = [deque(maxlen=80) for _ in range(3)]
+    trails = [deque(maxlen=trail_length) for _ in range(3)]
 
     print("\033[?25l", end="", flush=True)
     
@@ -97,10 +97,10 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
             cur_x = [trail[-1][0] for trail in trails]
             cur_y = [trail[-1][1] for trail in trails]
 
-            target_cx = (min(cur_x) + max(cur_x)) / 2
-            target_cy = (min(cur_y) + max(cur_y)) / 2
+            target_cx = (m1 * cur_x[0] + m2 * cur_x[1] + m3 * cur_x[2]) / (m1 + m2 + m3) * 0.9 + ((min(cur_x) + max(cur_x)) / 2) * 0.1
+            target_cy = (m1 * cur_y[0] + m2 * cur_y[1] + m3 * cur_y[2]) / (m1 + m2 + m3) * 0.9 + ((min(cur_y) + max(cur_y)) / 2) * 0.1
             spread = max(max(cur_x) - min(cur_x), max(cur_y) - min(cur_y), 0.5)
-            target_hw = min(spread / 2 + pad, min_cam_hw)
+            target_hw = max(spread / 2 + pad, min_cam_hw)
 
             x0, x1 = cam_cx - cam_hw, cam_cx + cam_hw
             y0, y1 = cam_cy - cam_hw, cam_cy + cam_hw
@@ -110,12 +110,12 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
 
             cam_cx = cam_cx * (1 - smoothing) + target_cx * smoothing
             cam_cy = cam_cy * (1 - smoothing) + target_cy * smoothing
-            cam_hw = cam_hw * (1 - smoothing) + target_hw * smoothing
+            cam_hw = max(cam_hw * (1 - smoothing) + target_hw * smoothing, min_cam_hw)
 
             x_min, x_max = cam_cx - cam_hw, cam_cx + cam_hw
             y_min, y_max = cam_cy - cam_hw, cam_cy + cam_hw
 
-            frame = build_frame(state, trails, columns, lines, x_min, x_max, y_min, y_max)
+            frame = build_frame(trails, columns, lines, x_min, x_max, y_min, y_max)
             print('\033[H' + frame, end='', flush=True)
 
             time.sleep(time_step)
@@ -123,13 +123,13 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines):
         print("\033[?25h", end="", flush=True)
 
 # Helper functions to actually build ASCII / braille frame ---------------------
-def build_frame(state, trails, columns, rows, x_min, x_max, y_min, y_max):
+def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
     bits = [[0] * columns for _ in range(rows)]
     colors = [[(0, 0, 0) for _ in range(columns)] for _ in range(rows)]
     
     for age in range(len(trails[0])):
         for body in range(3):
-            brightness = (age + 1) / 80
+            brightness = min((age + 1) / 80, 1.0)
             r_, g_, b_ = BODY_COLOURS[body]
             colour = (int(r_ * brightness), int(g_ * brightness), int(b_ * brightness))
 
@@ -273,6 +273,8 @@ def parse():
     parser.add_argument('--blue', type=int, nargs=3, help='RGB colour to use as blue')
     parser.add_argument('--green', type=int, nargs=3, help='RGB colour to use as green')
     parser.add_argument('--save_path', type=str, help = 'save path for single_renders')
+    parser.add_argument('--time_step', type=float, default=0.01, help='Time step for infinite mode')
+    parser.add_argument('--trail_length', type=int, default=80, help='Trail length for infinite mode')
     args = parser.parse_args()
     return args
 
@@ -298,6 +300,6 @@ if __name__ == "__main__":
     if args.mode == 'infinite':
         columns, lines = get_terminal_size()
         initial_state = np.array(args.initial_state) if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
-        infinite_render(0.01, args.g, args.m1, args.m2, args.m3, initial_state, columns, lines)
+        infinite_render(args.time_step, args.g, args.m1, args.m2, args.m3, initial_state, columns, lines, args.trail_length)
     if args.mode == 'random-search':
         infinite_config_finder(int(args.time))
