@@ -126,6 +126,8 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
 def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
     bits = [[0] * columns for _ in range(rows)]
     colors = [[(0, 0, 0) for _ in range(columns)] for _ in range(rows)]
+    offsets = [(1, 1), (1, -1), (-1, 1), (-1, -1), (2, 0), (-2, 0), (0, 2), (0, -2)]
+    light_offsets = [(1, -2), (1, 2), (-1, -2), (-1, 2), (2, -1), (2, 1), (-2, -1), (-2, 1)]
     
     for age in range(len(trails[0])):
         for body in range(3):
@@ -141,6 +143,33 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
                 bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
                 bits[row][col] |= (1 << bit_index)
                 colors[row][col] = colour
+    
+
+    for body in range(3):
+        r_, g_, b_ = BODY_COLOURS[body]
+        colour = (int(r_ * 0.3), int(g_ * 0.3), int(b_ * 0.3))
+        xx, yy = to_dot(trails[body][-1][0], trails[body][-1][1], x_min, y_min, x_max, y_max, columns, rows)
+        
+        for dx, dy in light_offsets:
+            row, col, dotx, doty = dot_to_braille(xx + dx, yy + dy)
+            if 0 <= row < rows and 0 <= col < columns:
+                bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
+                bits[row][col] |= (1 << bit_index)
+                colors[row][col] = colour
+    for body in range(3):
+        r_, g_, b_ = BODY_COLOURS[body]
+        colour = (r_, g_, b_)
+        xx, yy = to_dot(trails[body][-1][0], trails[body][-1][1], x_min, y_min, x_max, y_max, columns, rows)
+        
+        for dx, dy in offsets:
+            row, col, dotx, doty = dot_to_braille(xx + dx, yy + dy)
+            if 0 <= row < rows and 0 <= col < columns:
+                bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
+                bits[row][col] |= (1 << bit_index)
+                colors[row][col] = colour
+
+
+
 
     lines_out = []
     for row in range(rows):
@@ -262,7 +291,7 @@ def judging(solution):
 def parse():
     parser = argparse.ArgumentParser(description="3-Body Problem Simulator")
     parser.add_argument('--mode', type=str, default='single', choices=['single', 'infinite', 'random-search'], help='Mode of operation')
-    parser.add_argument('--time', type=float, default=1000.0, help='Simulation time for single and random-search modes')
+    parser.add_argument('--time', type=float, default=100.0, help='Simulation time for single and random-search modes')
     parser.add_argument('--g', type=float, default=1.0, help='Gravitational constant for all modes')
     parser.add_argument('--m1', type=float, default=1.0, help='Mass of body 1 for single and infinite mode')
     parser.add_argument('--m2', type=float, default=1.0, help='Mass of body 2 for single and infinite modes')
