@@ -11,7 +11,7 @@ from scipy.integrate import solve_ivp
 
 # -----------------------------------------------------------------------------
 
-# Equations of motion ------------
+# Equations of motion ---------------------------------------------------------
 def three_body(t, state, G, m1, m2, m3):
     p1, p2, p3 = state[:6].reshape(3, 2)
     v1, v2, v3 = state[6:].reshape(3, 2)
@@ -21,6 +21,44 @@ def three_body(t, state, G, m1, m2, m3):
     a1 = G * m2 * dr12 / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr13 / (r13_sq * np.sqrt(r13_sq))
     a2 = G * m1 * (-dr12) / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr23 / (r23_sq * np.sqrt(r23_sq))
     a3 = G * m1 * (-dr13) / (r13_sq * np.sqrt(r13_sq)) + G * m2 * (-dr23) / (r23_sq * np.sqrt(r23_sq))
+    return np.concatenate([v1, v2, v3, a1, a2, a3])
+
+# Equations of motion with artificial confining, for live rendering -----------
+def three_body_artificial(t, state, G, m1, m2, m3):
+    p1, p2, p3 = state[:6].reshape(3, 2)
+    v1, v2, v3 = state[6:].reshape(3, 2)
+    dr12 = p2 - p1; r12_sq = dr12 @ dr12 + 1e-3
+    dr13 = p3 - p1; r13_sq = dr13 @ dr13 + 1e-3
+    dr23 = p3 - p2; r23_sq = dr23 @ dr23 + 1e-3
+    a1 = G * m2 * dr12 / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr13 / (r13_sq * np.sqrt(r13_sq))
+    a2 = G * m1 * (-dr12) / (r12_sq * np.sqrt(r12_sq)) + G * m3 * dr23 / (r23_sq * np.sqrt(r23_sq))
+    a3 = G * m1 * (-dr13) / (r13_sq * np.sqrt(r13_sq)) + G * m2 * (-dr23) / (r23_sq * np.sqrt(r23_sq))
+    
+    p_average = (m1 * p1 + m2 * p2 + m3 * p3) / (m1 + m2 + m3)
+
+
+    CONFINING = 0.1
+    DAMPING = 0.3
+    MAX_RADIUS = 8.0
+    confinments = [np.zeros(2), np.zeros(2), np.zeros(2)]
+
+    v_average = (m1 * v1 + m2 * v2 + m3 * v3) / (m1 + m2 + m3)
+
+    for i, (p, v) in enumerate([(p1, v1), (p2, v2), (p3, v3)]):
+        dif = p - p_average
+        r = np.linalg.norm(dif)
+        if r > MAX_RADIUS:
+            r_hat = dif / r
+            spring = -CONFINING * (r - MAX_RADIUS) * r_hat
+            radial_v = np.dot(v-v_average, r_hat)
+            drag = -DAMPING * radial_v * r_hat
+            confinments[i] = spring + drag
+
+    a1 += confinments[0]
+    a2 += confinments[1]
+    a3 += confinments[2]
+
+
     return np.concatenate([v1, v2, v3, a1, a2, a3])
 
 # Single-step RK4 (for infinite rendering) ------------------------------------
@@ -76,12 +114,12 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 # Infinite terminal rendering function ----------------------------------------
 def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length):
     state = initial_state
-    steps_per_cycle = 1
+    steps_per_cycle = 3
     pad = 0.5
     cam_cx = 0.0
     cam_cy = 0.0
     cam_hw = 3.0
-    min_cam_hw = 3.5
+    min_cam_hw = 1
 
     trails = [deque(maxlen=trail_length) for _ in range(3)]
 
@@ -90,7 +128,7 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
     try:
         while True:
             for _ in range(steps_per_cycle):
-                state = rk4_step(three_body, 0, state, time_step, g, m1, m2, m3)
+                state = rk4_step(three_body_artificial, 0, state, time_step, g, m1, m2, m3)
             for i in range(3):
                 trails[i].append((state[i*2], state[i*2+1]))
 
@@ -106,7 +144,7 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
             y0, y1 = cam_cy - cam_hw, cam_cy + cam_hw
 
             inside = all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in zip(cur_x, cur_y))
-            smoothing = 1.0 if not inside else 0.1
+            smoothing = 1.0 if not inside else 0.04
 
             cam_cx = cam_cx * (1 - smoothing) + target_cx * smoothing
             cam_cy = cam_cy * (1 - smoothing) + target_cy * smoothing
