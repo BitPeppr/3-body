@@ -163,7 +163,8 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
 # Helper functions to actually build ASCII / braille frame ---------------------
 def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
     bits = [[0] * columns for _ in range(rows)]
-    colors = [[(0, 0, 0) for _ in range(columns)] for _ in range(rows)]
+    colors = [[[0, 0, 0] for _ in range(columns)] for _ in range(rows)]
+    num = [[0] * columns for _ in range(rows)]
     offsets = [(1, 1), (1, -1), (-1, 1), (-1, -1), (2, 0), (-2, 0), (0, 2), (0, -2)]
     light_offsets = [(1, -2), (1, 2), (-1, -2), (-1, 2), (2, -1), (2, 1), (-2, -1), (-2, 1)]
     
@@ -180,7 +181,10 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
             if 0 <= row < rows and 0 <= col < columns:
                 bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
                 bits[row][col] |= (1 << bit_index)
-                colors[row][col] = colour
+                colors[row][col][0] += colour[0]
+                colors[row][col][1] += colour[1]
+                colors[row][col][2] += colour[2]
+                num[row][col] += 1
     
 
     for body in range(3):
@@ -193,7 +197,10 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
             if 0 <= row < rows and 0 <= col < columns:
                 bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
                 bits[row][col] |= (1 << bit_index)
-                colors[row][col] = colour
+                colors[row][col][0] += colour[0]
+                colors[row][col][1] += colour[1]
+                colors[row][col][2] += colour[2]
+                num[row][col] += 1
     for body in range(3):
         r_, g_, b_ = BODY_COLOURS[body]
         colour = (r_, g_, b_)
@@ -204,7 +211,16 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
             if 0 <= row < rows and 0 <= col < columns:
                 bit_index = doty + dotx * 3 if doty < 3 else 6 + dotx
                 bits[row][col] |= (1 << bit_index)
-                colors[row][col] = colour
+                colors[row][col][0] += colour[0]
+                colors[row][col][1] += colour[1]
+                colors[row][col][2] += colour[2]
+                num[row][col] += 1
+    for row in range(rows):
+        for col in range(columns):
+            if num[row][col] > 0:
+                colors[row][col][0] = colors[row][col][0] // num[row][col]
+                colors[row][col][1] = colors[row][col][1] // num[row][col]
+                colors[row][col][2] = colors[row][col][2] // num[row][col]
 
 
 
