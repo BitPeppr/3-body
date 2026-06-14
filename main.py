@@ -152,7 +152,7 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
                 dy = max(y0-y, 0, y-y1) / cam_hw
                 max_outside = max(max_outside, (dx*dx + dy*dy)**0.5)
 
-            smoothing = min(0.15 + max_outside * 0.001, 1.0)
+            smoothing = min(0.15 + max_outside * 0.01, 1.0)
 
             cam_cx = cam_cx * (1 - smoothing) + target_cx * smoothing
             cam_cy = cam_cy * (1 - smoothing) + target_cy * smoothing
@@ -368,7 +368,7 @@ def parse():
     parser.add_argument('--save_path', type=str, help = 'save path for single_renders')
     parser.add_argument('--time_step', type=float, default=0.01, help='Time step for infinite mode')
     parser.add_argument('--trail_length', type=int, default=80, help='Trail length for infinite mode')
-    parser.add_argument('--preset', type=str, choices=['figure8', 'ephemeral', 'saturn', 'spiral-chain'], help='Preset initial conditions')
+    parser.add_argument('--preset', type=str, choices=['figure8', 'ephemeral', 'saturn', 'spiral-chain', 'slinky', 'rings'], help='Preset initial conditions')
     args = parser.parse_args()
     return args
 
@@ -402,6 +402,16 @@ if __name__ == "__main__":
             m3 = 0.8789
         elif args.preset == 'saturn':
             initial_state = np.array([-0.175000, 0.000000, 0.175000, 0.000000, 0.000000, 2.000000, 0.408248, -1.195229, 0.408248, 1.195229, -0.816497, 0.000000])
+        elif args.preset == 'slinky':
+            initial_state = np.array([0.732298, -0.752980, -0.696455, 0.978863, -0.437307, -0.605142, -0.678471, 0.260894, 0.493752, 0.242689, -0.974850, -0.859507])
+            m1 = 1.1777
+            m2 = 1.1246
+            m3 = 1.5690
+        elif args.preset == 'rings':
+            initial_state = np.array([-0.090909, 0.000000, 0.409091, 0.000000, 0.000000, 2.200000, 0.376889, -0.381385, 0.376889, 1.716233, -0.829156, 0.000000])
+            m1 = 1.8000
+            m2 = 0.4000
+            m3 = 1.0000
         else:
             raise ValueError("Unknown preset. Use -h flag to check available presets.")
     elif args.initial_state:
@@ -409,7 +419,7 @@ if __name__ == "__main__":
             raise ValueError("Initial state must have exactly 12 values (x1, y1, x2, y2, x3, y3, vx1, vy1, vx2, vy2, vx3, vy3)")
         initial_state = np.array(args.initial_state)
     else:
-        initial_state = np.random.uniform(-1.0, 1.0, 12)
+        initial_state = np.random.uniform(-0.7, 0.7, 12)
 
     if args.mode == 'single':
         single_render(int(args.time), args.g, m1, m2, m3, initial_state, args.save)
