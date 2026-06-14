@@ -115,11 +115,12 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length):
     state = initial_state
     steps_per_cycle = 1
-    pad = 0.5
+    pad = 0.3
     cam_cx = 0.0
     cam_cy = 0.0
     cam_hw = 3.0
     min_cam_hw = 1
+    max_outside = 0.0
 
     trails = [deque(maxlen=trail_length) for _ in range(3)]
 
@@ -137,18 +138,27 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
 
             target_cx = (m1 * cur_x[0] + m2 * cur_x[1] + m3 * cur_x[2]) / (m1 + m2 + m3) * 0.9 + ((min(cur_x) + max(cur_x)) / 2) * 0.1
             target_cy = (m1 * cur_y[0] + m2 * cur_y[1] + m3 * cur_y[2]) / (m1 + m2 + m3) * 0.9 + ((min(cur_y) + max(cur_y)) / 2) * 0.1
-            spread = max(max(cur_x) - min(cur_x), max(cur_y) - min(cur_y), 0.5)
-            target_hw = max(spread / 2 + pad, min_cam_hw)
+            target_hw = max(
+              max(abs(x - target_cx) for x in cur_x),
+               max(abs(y - target_cy) for y in cur_y),
+               0.5
+            ) + pad
 
             x0, x1 = cam_cx - cam_hw, cam_cx + cam_hw
             y0, y1 = cam_cy - cam_hw, cam_cy + cam_hw
+            
+            for x, y in zip(cur_x, cur_y):
+                dx = max(x0-x, 0, x-x1) / cam_hw
+                dy = max(y0-y, 0, y-y1) / cam_hw
+                max_outside = max(max_outside, (dx*dx + dy*dy)**0.5)
 
-            inside = all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in zip(cur_x, cur_y))
-            smoothing = 1.0 if not inside else 0.04
+            smoothing = min(0.15 + max_outside * 0.001, 1.0)
 
             cam_cx = cam_cx * (1 - smoothing) + target_cx * smoothing
             cam_cy = cam_cy * (1 - smoothing) + target_cy * smoothing
+
             cam_hw = max(cam_hw * (1 - smoothing) + target_hw * smoothing, min_cam_hw)
+
 
             x_min, x_max = cam_cx - cam_hw, cam_cx + cam_hw
             y_min, y_max = cam_cy - cam_hw, cam_cy + cam_hw
@@ -358,6 +368,7 @@ def parse():
     parser.add_argument('--save_path', type=str, help = 'save path for single_renders')
     parser.add_argument('--time_step', type=float, default=0.01, help='Time step for infinite mode')
     parser.add_argument('--trail_length', type=int, default=80, help='Trail length for infinite mode')
+    parser.add_argument('--preset', type=str, choices=['figure8', 'ephemeral', 'saturn', 'spiral-chain'], help='Preset initial conditions')
     args = parser.parse_args()
     return args
 
@@ -374,15 +385,39 @@ if __name__ == "__main__":
     green = args.green if args.green else (120, 220, 120)
     BODY_COLOURS = [red, blue, green]
     cwd = os.path.expanduser(args.save_path) if args.save_path else os.getcwd()
+
+    m1 = args.m1
+    m2 = args.m2
+    m3 = args.m3
+
+    if args.preset:
+        if args.preset == 'figure8':
+            initial_state = np.array([0.97000436, -0.24308753, -0.97000436, 0.24308753, 0.0, 0.0, 0.46620368, 0.43236573, 0.46620368, 0.43236573, -0.93240737, -0.86473146])
+        elif args.preset == 'ephemeral':
+            initial_state = np.array([-1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.184280, 0.587190, 0.184280, 0.587190, -0.368560, -1.174380])
+        elif args.preset == 'spiral-chain':
+            initial_state = np.array([0.374010, 0.608473, 0.227849,-0.595011, -0.779423, 0.719799, -0.530625, -0.959835, 0.285804, -0.694229, 0.981940, 0.739462])
+            m1 = 0.5700
+            m2 = 1.6693
+            m3 = 0.8789
+        elif args.preset == 'saturn':
+            initial_state = np.array([-0.175000, 0.000000, 0.175000, 0.000000, 0.000000, 2.000000, 0.408248, -1.195229, 0.408248, 1.195229, -0.816497, 0.000000])
+        else:
+            raise ValueError("Unknown preset. Use -h flag to check available presets.")
+    elif args.initial_state:
+        if len(args.initial_state) != 12:
+            raise ValueError("Initial state must have exactly 12 values (x1, y1, x2, y2, x3, y3, vx1, vy1, vx2, vy2, vx3, vy3)")
+        initial_state = np.array(args.initial_state)
+    else:
+        initial_state = np.random.uniform(-1.0, 1.0, 12)
+
     if args.mode == 'single':
-        initial_state = np.array(args.initial_state) if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
-        single_render(int(args.time), args.g, args.m1, args.m2, args.m3, initial_state, args.save)
+        single_render(int(args.time), args.g, m1, m2, m3, initial_state, args.save)
         print("Single simulation completed.")
         print(f"Parameters: Time={args.time}, G={args.g}, m1={args.m1}, m2={args.m2}, m3={args.m3}")
         print(f"Initial State: {initial_state}")
     if args.mode == 'infinite':
         columns, lines = get_terminal_size()
-        initial_state = np.array(args.initial_state) if args.initial_state else np.random.uniform(-1.0, 1.0, 12)
-        infinite_render(args.time_step, args.g, args.m1, args.m2, args.m3, initial_state, columns, lines, args.trail_length)
+        infinite_render(args.time_step, args.g, m1, m2, m3, initial_state, columns, lines, args.trail_length)
     if args.mode == 'random-search':
         infinite_config_finder(int(args.time))
