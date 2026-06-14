@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import random
 import shutil
@@ -163,7 +164,7 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
             x_min, x_max = cam_cx - cam_hw, cam_cx + cam_hw
             y_min, y_max = cam_cy - cam_hw, cam_cy + cam_hw
 
-            frame = build_frame(trails, columns, lines, x_min, x_max, y_min, y_max)
+            frame = build_frame(trails, columns, lines, x_min, x_max, y_min, y_max, cam_hw)
             print('\033[H' + frame, end='', flush=True)
 
             time.sleep(time_step)
@@ -171,18 +172,19 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
         print("\033[?25h", end="", flush=True)
 
 # Helper functions to actually build ASCII / braille frame ---------------------
-def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
+def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max, zoom):
     bits = [[0] * columns for _ in range(rows)]
     colors = [[[0, 0, 0] for _ in range(columns)] for _ in range(rows)]
     num = [[0] * columns for _ in range(rows)]
     offsets = [(1, 1), (1, -1), (-1, 1), (-1, -1), (2, 0), (-2, 0), (0, 2), (0, -2)]
     light_offsets = [(1, -2), (1, 2), (-1, -2), (-1, 2), (2, -1), (2, 1), (-2, -1), (-2, 1)]
+    zoom_decay = max(min(2 / (math.log10(zoom) + math.log10(zoom+1)), 1), 0.5)
     
     for age in range(len(trails[0])):
         for body in range(3):
             brightness = min((age + 1) / 80, 1.0)
             r_, g_, b_ = BODY_COLOURS[body]
-            colour = (int(r_ * brightness), int(g_ * brightness), int(b_ * brightness))
+            colour = (int(r_ * brightness* zoom_decay), int(g_ * brightness * zoom_decay), int(b_ * brightness * zoom_decay))
 
             xx, yy = to_dot(trails[body][age][0], trails[body][age][1], x_min, y_min, x_max, y_max, columns, rows)
 
@@ -199,7 +201,7 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
 
     for body in range(3):
         r_, g_, b_ = BODY_COLOURS[body]
-        colour = (int(r_ * 0.3), int(g_ * 0.3), int(b_ * 0.3))
+        colour = (int(r_ * 0.3 * zoom_decay), int(g_ * 0.3 * zoom_decay), int(b_ * 0.3 * zoom_decay))
         xx, yy = to_dot(trails[body][-1][0], trails[body][-1][1], x_min, y_min, x_max, y_max, columns, rows)
         
         for dx, dy in light_offsets:
@@ -213,7 +215,7 @@ def build_frame(trails, columns, rows, x_min, x_max, y_min, y_max):
                 num[row][col] += 1
     for body in range(3):
         r_, g_, b_ = BODY_COLOURS[body]
-        colour = (r_, g_, b_)
+        colour = (int(r_ * zoom_decay), int(g_ * zoom_decay), int(b_ * zoom_decay))
         xx, yy = to_dot(trails[body][-1][0], trails[body][-1][1], x_min, y_min, x_max, y_max, columns, rows)
         
         for dx, dy in offsets:
