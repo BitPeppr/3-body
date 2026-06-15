@@ -5,8 +5,8 @@ A command-line based 3-body problem visualiser, simulator, and renderer, with li
 To use:
 
 ```python
-python main.py # Default, random single render
-python main.py --initial-state ... # Custom initial state, with masses, positions, velocities
-python main.py --mode infinite # Infinite, terminal-based braille visualisation, updating live.
-python main.py -h # For more options and details, check out help menu
+trisolaris # Default, random single render
+trisolaris --initial-state ... # Custom initial state, with masses, positions, velocities
+trisolaris --mode infinite # Infinite, terminal-based braille visualisation, updating live.
+trisolaris -h # For more options and details, check out help menu
 ```

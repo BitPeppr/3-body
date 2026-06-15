@@ -80,9 +80,9 @@ def get_terminal_size():
 # -----------------------------------------------------------------------------
 
 # One-time rendering function for a given configuration, used for single mode -
-def single_render(time, g, im1, im2, im3, initial_state, save):
-    t_span = (0, time)
-    t_eval = np.linspace(t_span[0], t_span[1], time * 2000)
+def single_render(time_, g, im1, im2, im3, initial_state, save):
+    t_span = (0, time_)
+    t_eval = np.linspace(t_span[0], t_span[1], int(time_ * 2000))
     solution = solve_ivp(three_body, t_span, initial_state, t_eval=t_eval, method='RK45', args=(g, im1, im2, im3))
     x1, y1 = solution.y[0], solution.y[1]
     x2, y2 = solution.y[2], solution.y[3]
@@ -291,7 +291,7 @@ def infinite_config_finder(sim_time):
 
     # Define constant parameters
     t_span = (0, sim_time)
-    t_eval = np.linspace(t_span[0], t_span[1], sim_time * 2000)
+    t_eval = np.linspace(t_span[0], t_span[1], int(sim_time * 2000))
     G = 1.0
 
 
@@ -399,7 +399,8 @@ def parse():
 # -----------------------------------------------------------------------------
 
 # Main loop -------------------------------------------------------------------
-if __name__ == "__main__":
+def main():
+    global BODY_COLOURS, cwd
     args = parse()
     red = args.red if args.red else (255, 140, 160)
     blue = args.blue if args.blue else (130, 175, 255)
