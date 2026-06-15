@@ -113,7 +113,7 @@ def single_render(time, g, im1, im2, im3, initial_state, save):
 
 
 # Infinite terminal rendering function ----------------------------------------
-def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length):
+def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, trail_length, reset):
     state = initial_state
     steps_per_cycle = 1
     pad = 0.3
@@ -166,6 +166,14 @@ def infinite_render(time_step, g, m1, m2, m3, initial_state, columns, lines, tra
 
             frame = build_frame(trails, columns, lines, x_min, x_max, y_min, y_max, cam_hw)
             print('\033[H' + frame, end='', flush=True)
+
+            if reset:
+                if check_inf(state[:6]):
+                    state = np.random.uniform(-0.7, 0.7, 12)
+                    trails[0].clear()
+                    trails[1].clear()
+                    trails[2].clear()
+
 
             time.sleep(time_step)
     finally:
@@ -260,6 +268,16 @@ def dot_to_braille(x, y):
     dotx = int(x % 2)
     doty = int(y % 4)
     return celly, cellx, dotx, doty
+
+def check_inf(pos):
+    p1 = pos[:2]
+    p2 = pos[2:4]
+    p3 = pos[4:6]
+    average = (p1 + p2 + p3) / 3
+    d1 = np.linalg.norm(p1 - average)
+    d2 = np.linalg.norm(p2 - average)
+    d3 = np.linalg.norm(p3 - average)
+    return max(d1, d2, d3) > 10.0 or min(d1, d2, d3) < 0.05
 
 
 # -----------------------------------------------------------------------------
@@ -371,6 +389,7 @@ def parse():
     parser.add_argument('--time_step', type=float, default=0.01, help='Time step for infinite mode')
     parser.add_argument('--trail_length', type=int, default=80, help='Trail length for infinite mode')
     parser.add_argument('--preset', type=str, choices=['figure8', 'ephemeral', 'saturn', 'spiral-chain', 'slinky', 'rings'], help='Preset initial conditions')
+    parser.add_argument('--auto-reset', action='store_true', help='Automatically reset to a new random configuration if bodies fly too far in infinite mode')
     args = parser.parse_args()
     return args
 
@@ -430,6 +449,6 @@ if __name__ == "__main__":
         print(f"Initial State: {initial_state}")
     if args.mode == 'infinite':
         columns, lines = get_terminal_size()
-        infinite_render(args.time_step, args.g, m1, m2, m3, initial_state, columns, lines, args.trail_length)
+        infinite_render(args.time_step, args.g, m1, m2, m3, initial_state, columns, lines, args.trail_length, args.auto_reset)
     if args.mode == 'random-search':
         infinite_config_finder(int(args.time))
