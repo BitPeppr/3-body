@@ -8,7 +8,10 @@ To install:
 
 ```bash
 pip install trisolaris
+brew tap bitpeppr/homebrew-formulae && brew install trisolaris
 ```
+
+> Note that there currently Homebrew install returns an install error, yet trisolaris installs fine and runs well. I'm working to solve this, sorry for the confusion!
 
 To use:
 
